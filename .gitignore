@@ -1,0 +1,135 @@
+# ============================================================
+# .gitignore for Homelab IPAM project
+# Covers: Python, Node/React, Terraform, Ansible, Docker, IDE, OS
+# ============================================================
+
+# ----------------------------
+# Secrets & environment files
+# ----------------------------
+# NEVER commit any of these — they contain passwords, API tokens,
+# Tailscale auth keys, Proxmox tokens, etc.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets/
+credentials/
+*.tfvars
+!example.tfvars
+
+# ----------------------------
+# Python (backend)
+# ----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# ----------------------------
+# Node / React (frontend)
+# ----------------------------
+node_modules/
+.pnp/
+.pnp.js
+coverage/
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+.vite/
+dist/
+build/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ----------------------------
+# Terraform (infra)
+# ----------------------------
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+.terraform.lock.hcl
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# ----------------------------
+# Ansible
+# ----------------------------
+*.retry
+inventory/host_vars/*_secrets.yml
+inventory/group_vars/*_secrets.yml
+
+# ----------------------------
+# Docker
+# ----------------------------
+*.log
+.dockerignore.local
+
+# ----------------------------
+# Kubernetes — never commit kubeconfig (it grants cluster admin)
+# ----------------------------
+kubeconfig
+*.kubeconfig
+.kube/
+
+# ----------------------------
+# IDE / editor
+# ----------------------------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ----------------------------
+# Operating system clutter
+# ----------------------------
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.fuse_hidden*
+.Trash-*
+
+# ----------------------------
+# Misc
+# ----------------------------
+*.bak
+*.tmp
+*.temp
+tmp/
+temp/
