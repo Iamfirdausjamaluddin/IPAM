@@ -30,7 +30,7 @@ I'm an IT infrastructure professional learning programming and DevOps. Rather th
 
 | Layer | Tool |
 |---|---|
-| Backend | Python 3.11 + FastAPI |
+| Backend | Python 3.12 + FastAPI |
 | Frontend | React + Vite + Tailwind CSS |
 | Database | PostgreSQL 16 + Alembic migrations |
 | Containerization | Docker |
