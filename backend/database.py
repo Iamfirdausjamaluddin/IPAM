@@ -23,7 +23,9 @@ if not DATABASE_URL:
 # The engine is a connection pool to Postgres — created once, reused
 # for the lifetime of the app. echo=True logs every SQL statement to
 # the terminal, which is enormously helpful while learning.
-engine = create_engine(DATABASE_URL, echo=True)
+# echo defaults to False; set SQL_ECHO=true in .env to see SQL traffic.
+SQL_ECHO = os.getenv("SQL_ECHO", "false").lower() == "true"
+engine = create_engine(DATABASE_URL, echo=SQL_ECHO)
 
 # SessionLocal is a factory: calling SessionLocal() gives a fresh
 # Session, the object we use to run queries and save changes.
