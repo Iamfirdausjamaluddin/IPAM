@@ -1,59 +1,74 @@
 """
-Seed the ip_addresses table with the same 6 example IPs that were
-previously hardcoded as FAKE_IPS in main.py.
+Populates the ip_addresses table with one row per IP in the assignment range.
 
-Run: python seed.py
+This script is idempotent: running it twice does nothing the second time.
+The scanner (Phase 3) updates these rows; this script only ensures they exist.
 
-Idempotent: safe to run more than once. If a row already exists for an
-IP (matched by the unique 'ip' column), it is updated instead of inserted.
+Range: 10.10.11.10 - 10.10.15.254 (the user's VM assignment range from
+homelab-context.md, minus the /20 broadcast 10.10.15.255).
 """
+import ipaddress
 from sqlalchemy import select
 
 from database import SessionLocal
 from models import IPAddress
 
-SEED_DATA = [
-    {"ip": "10.10.14.1",  "status": "gateway",  "hostname": "pfsense",     "is_alive": True},
-    {"ip": "10.10.14.10", "status": "in_use",   "hostname": "ad-dc-01",    "is_alive": True},
-    {"ip": "10.10.14.11", "status": "in_use",   "hostname": "pki-root-ca", "is_alive": True},
-    {"ip": "10.10.14.20", "status": "reserved", "hostname": "future-vm",   "is_alive": False},
-    {"ip": "10.10.14.50", "status": "free",     "hostname": None,          "is_alive": False},
-    {"ip": "10.10.14.99", "status": "rogue",    "hostname": "unknown",     "is_alive": True},
-]
+
+# Inclusive range, defined once here so it's easy to audit and change.
+RANGE_START = ipaddress.IPv4Address("10.10.11.10")
+RANGE_END = ipaddress.IPv4Address("10.10.15.254")
 
 
-def seed() -> None:
-    """Insert or update every row in SEED_DATA."""
+def iter_range(start: ipaddress.IPv4Address, end: ipaddress.IPv4Address):
+    """Yield every IPv4 address from start to end, inclusive."""
+    current = int(start)
+    last = int(end)
+    while current <= last:
+        yield ipaddress.IPv4Address(current)
+        current += 1
+
+
+def populate() -> tuple[int, int]:
+    """
+    Ensure a row exists for every IP in the assignment range.
+
+    Returns (inserted, skipped) — how many rows were added vs already present.
+    """
     inserted = 0
-    updated = 0
+    skipped = 0
 
-    # Open a session — the unit of work for talking to the DB.
-    # Using 'with' guarantees the session is closed even if something blows up.
     with SessionLocal() as session:
-        for entry in SEED_DATA:
-            # Look for an existing row with the same IP.
-            stmt = select(IPAddress).where(IPAddress.ip == entry["ip"])
-            existing = session.scalars(stmt).one_or_none()
+        # Load every IP currently in the table into a set for O(1) lookup.
+        # For 1,262 rows this is trivially small; we'd switch to per-row
+        # checks if the range ever grew to millions.
+        existing = {
+            row.ip
+            for row in session.scalars(select(IPAddress)).all()
+        }
 
-            if existing is None:
-                # Brand new IP — create a row from the dict and add it.
-                session.add(IPAddress(**entry))
-                inserted += 1
-            else:
-                # Already exists — overwrite its fields with the seed values.
-                # This keeps the seed authoritative if you re-run it after edits.
-                existing.status = entry["status"]
-                existing.hostname = entry["hostname"]
-                existing.is_alive = entry["is_alive"]
-                updated += 1
+        new_rows = []
+        for addr in iter_range(RANGE_START, RANGE_END):
+            ip_str = str(addr)
+            if ip_str in existing:
+                skipped += 1
+                continue
+            new_rows.append(
+                IPAddress(
+                    ip=ip_str,
+                    status="free",
+                    hostname=None,
+                    is_alive=False,
+                )
+            )
+            inserted += 1
 
-        # Nothing has actually been written to Postgres yet — SQLAlchemy
-        # has been queueing changes in memory. commit() sends them as a
-        # single transaction. If anything fails, none of it persists.
-        session.commit()
+        if new_rows:
+            session.add_all(new_rows)
+            session.commit()
 
-    print(f"Seed complete: {inserted} inserted, {updated} updated.")
+    return inserted, skipped
 
 
 if __name__ == "__main__":
-    seed()
+    inserted, skipped = populate()
+    print(f"Populate complete: {inserted} inserted, {skipped} skipped (already present).")

@@ -39,6 +39,12 @@ class IPAddress(Base):
     # inserted rows have a sane starting value before the scanner runs.
     is_alive: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Last time this IP responded to a ping. NULL means we've never seen it
+    # respond. Only the scanner writes here, and only on a successful ping.
+    last_seen: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Timestamps — set by the database, not by our Python code.
     # server_default=func.now() tells Postgres to fill it in on INSERT.
     # onupdate=func.now() updates it whenever the row is modified.
