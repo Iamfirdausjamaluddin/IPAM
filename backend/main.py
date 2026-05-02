@@ -1,15 +1,20 @@
 """
-IPAM Backend API — Phase 3
+IPAM Backend API — Phase 3 + Phase 4 (CORS added)
 
 FastAPI app with a background ICMP scanner. The scanner runs every
 5 minutes inside the same process as the API, updating is_alive and
 last_seen columns in the ip_addresses table.
+
+Phase 4 adds CORS middleware so the React dev server at localhost:5174
+can call this API from the browser.
 """
+
 import asyncio
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,7 +28,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
-
 logger = logging.getLogger(__name__)
 
 
@@ -81,6 +85,18 @@ app = FastAPI(
 )
 
 
+# CORS — allow the React dev server to call this API from the browser.
+# Tight by default: only the Vite dev server origin is allowed.
+# When we deploy to K3s in Phase 8, the production frontend origin gets added here.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5174"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 @app.get("/")
 def read_root():
     """Root endpoint — a friendly hello to confirm the API is up."""
@@ -108,6 +124,7 @@ def list_ips(db: Session = Depends(get_db)):
     """
     stmt = select(IPAddress).order_by(IPAddress.id)
     rows = db.scalars(stmt).all()
+
     return {
         "count": len(rows),
         "ips": [
