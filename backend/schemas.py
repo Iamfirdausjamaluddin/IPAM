@@ -16,6 +16,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from status import IPStatus
+
 
 class ReservationBase(BaseModel):
     """Fields shared by create and update — all optional except where noted.
@@ -96,3 +98,20 @@ class ReservationRead(ReservationBase):
     ip: str
     created_at: datetime
     updated_at: datetime
+
+
+class IPCell(BaseModel):
+    """One cell in the dashboard grid: an IP plus its computed status.
+
+    Returned by GET /grid/{third_octet}. Deliberately minimal — just what
+    the frontend needs to paint a single square. The full per-IP detail
+    for the side panel (hostname, MAC, note, last_seen, ...) is fetched one
+    IP at a time when a cell is clicked, not for all 256 cells at once.
+
+    Typing `status` as IPStatus (not a plain str) means FastAPI documents
+    the five allowed values in Swagger, and a bad value would be caught
+    before it ever reached the client.
+    """
+
+    ip: str
+    status: IPStatus

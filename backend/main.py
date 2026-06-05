@@ -1,12 +1,13 @@
 """
-IPAM Backend API — Phase 3 + Phase 4 (CORS added)
+IPAM Backend API — Phase 3 + Phase 4 (CORS + grid endpoint)
 
 FastAPI app with a background ICMP scanner. The scanner runs every
 5 minutes inside the same process as the API, updating is_alive and
 last_seen columns in the ip_addresses table.
 
 Phase 4 adds CORS middleware so the React dev server at localhost:5174
-can call this API from the browser.
+can call this API from the browser, plus the GET /grid/{third_octet}
+endpoint that serves the computed per-IP status for one /24 tab.
 """
 
 import asyncio
@@ -19,9 +20,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from dependencies import get_db
+from grid import compute_subnet_grid
 from models import IPAddress, Reservation
 from scanner import scan_all_ips
-from schemas import ReservationCreate, ReservationRead, ReservationUpdate
+from schemas import IPCell, ReservationCreate, ReservationRead, ReservationUpdate
 
 
 # Show INFO-level logs from our own modules so we can see scanner progress.
@@ -35,6 +37,10 @@ logger = logging.getLogger(__name__)
 # How often the background scanner runs a full pass.
 # Per homelab-context.md section 12, full scans are spaced 5 minutes apart.
 SCAN_INTERVAL_SECONDS = 300
+
+# The /24 tabs the dashboard tracks: the third octet of 10.10.X.x.
+# Matches the tabs listed in homelab-context.md section 13 (11 through 15).
+TRACKED_SUBNETS = range(11, 16)  # 11, 12, 13, 14, 15
 
 
 async def _scanner_loop() -> None:
@@ -81,7 +87,7 @@ async def lifespan(app):
 
 app = FastAPI(
     title="Homelab IPAM API",
-    version="0.3.0",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
@@ -103,7 +109,7 @@ def read_root():
     """Root endpoint — a friendly hello to confirm the API is up."""
     return {
         "name": "Homelab IPAM API",
-        "version": "0.3.0",
+        "version": "0.4.0",
         "docs": "/docs",
     }
 
@@ -139,6 +145,38 @@ def list_ips(db: Session = Depends(get_db)):
         ],
     }
 
+
+@app.get("/grid/{third_octet}", response_model=list[IPCell])
+def get_subnet_grid(third_octet: int, db: Session = Depends(get_db)):
+    """
+    Return the computed status for all 256 IPs of one /24 tab.
+
+    {third_octet} is the tab number (11-15). FastAPI parses it as an int,
+    so a non-numeric path like /grid/abc is rejected with a 422 before this
+    function runs. We then check it's a tab we actually track and return a
+    friendly 404 if not — mirroring the out-of-range guard in
+    create_reservation.
+
+    The real work happens in grid.compute_subnet_grid(), which joins the
+    scanner's observations with the user's reservations and runs each IP
+    through status.compute_status(). This endpoint is a thin wrapper:
+    validate the input, hand off, return the list.
+
+    response_model=list[IPCell] guarantees the output shape — every element
+    is {"ip": "...", "status": "free|in_use|reserved|rogue|system"}.
+    """
+    if third_octet not in TRACKED_SUBNETS:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Subnet 10.10.{third_octet}.x is not tracked. "
+                f"Valid tabs are 11-15."
+            ),
+        )
+
+    return compute_subnet_grid(db, third_octet)
+
+
 @app.get("/reservations", response_model=list[ReservationRead])
 def list_reservations(db: Session = Depends(get_db)):
     """
@@ -168,6 +206,7 @@ def get_reservation(ip: str, db: Session = Depends(get_db)):
             detail=f"No reservation found for IP {ip}",
         )
     return reservation
+
 
 @app.post(
     "/reservations",
