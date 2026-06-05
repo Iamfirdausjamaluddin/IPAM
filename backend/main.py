@@ -13,14 +13,15 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from dependencies import get_db
-from models import IPAddress
+from models import IPAddress, Reservation
 from scanner import scan_all_ips
+from schemas import ReservationCreate, ReservationRead, ReservationUpdate
 
 
 # Show INFO-level logs from our own modules so we can see scanner progress.
@@ -137,3 +138,129 @@ def list_ips(db: Session = Depends(get_db)):
             for row in rows
         ],
     }
+
+@app.get("/reservations", response_model=list[ReservationRead])
+def list_reservations(db: Session = Depends(get_db)):
+    """
+    Return every reservation, ordered by IP.
+
+    response_model=list[ReservationRead] tells FastAPI to validate and
+    serialize each row through the ReservationRead schema — so the JSON
+    output shape is guaranteed, and Swagger documents it automatically.
+    """
+    stmt = select(Reservation).order_by(Reservation.ip)
+    return db.scalars(stmt).all()
+
+
+@app.get("/reservations/{ip}", response_model=ReservationRead)
+def get_reservation(ip: str, db: Session = Depends(get_db)):
+    """
+    Return a single reservation by its IP.
+
+    The {ip} in the path becomes the 'ip' function argument. We look it up
+    by primary key with db.get(). If there's no reservation for that IP,
+    we return a 404 instead of letting FastAPI return a confusing error.
+    """
+    reservation = db.get(Reservation, ip)
+    if reservation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No reservation found for IP {ip}",
+        )
+    return reservation
+
+@app.post(
+    "/reservations",
+    response_model=ReservationRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_reservation(payload: ReservationCreate, db: Session = Depends(get_db)):
+    """
+    Create a new reservation.
+
+    'payload: ReservationCreate' tells FastAPI to read the request body as
+    JSON and validate it against the ReservationCreate schema. If the JSON
+    is malformed or missing the required 'ip', FastAPI returns a 422 before
+    this function even runs.
+
+    status_code=201 is the HTTP convention for "created something new"
+    (vs the default 200 "OK"). Small detail, but it's correct REST.
+    """
+    # Guard 1: don't allow two reservations for the same IP. Since ip is the
+    # primary key, the DB would reject it anyway — but catching it here lets
+    # us return a friendly 409 Conflict instead of a raw database error.
+    existing = db.get(Reservation, payload.ip)
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"IP {payload.ip} is already reserved",
+        )
+
+    # Guard 2: the IP must exist in ip_addresses (our FK enforces this, but
+    # again — a clean 404 beats a cryptic foreign-key violation).
+    ip_exists = db.scalar(select(IPAddress).where(IPAddress.ip == payload.ip))
+    if ip_exists is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"IP {payload.ip} is not in the scanned range",
+        )
+
+    # Build the SQLAlchemy row from the validated payload.
+    # payload.model_dump() turns the Pydantic object into a plain dict;
+    # we unpack it with ** into the Reservation constructor.
+    reservation = Reservation(**payload.model_dump())
+    db.add(reservation)
+    db.commit()
+    db.refresh(reservation)  # reload so created_at/updated_at are populated
+    return reservation
+
+
+@app.put("/reservations/{ip}", response_model=ReservationRead)
+def update_reservation(
+    ip: str, payload: ReservationUpdate, db: Session = Depends(get_db)
+):
+    """
+    Update an existing reservation.
+
+    Every field in ReservationUpdate is optional, so the client can send
+    just the fields they want to change. We use exclude_unset=True so that
+    fields the client DIDN'T send are left untouched, rather than being
+    overwritten with None.
+    """
+    reservation = db.get(Reservation, ip)
+    if reservation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No reservation found for IP {ip}",
+        )
+
+    # exclude_unset=True is the key here: it gives us only the fields the
+    # client actually included in the request body. Without it, omitted
+    # fields would come back as None and wipe existing data.
+    updates = payload.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(reservation, field, value)
+
+    db.commit()
+    db.refresh(reservation)
+    return reservation
+
+
+@app.delete("/reservations/{ip}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_reservation(ip: str, db: Session = Depends(get_db)):
+    """
+    Delete a reservation by IP.
+
+    Returns 204 No Content on success — the HTTP convention for "done,
+    nothing to send back." If the reservation doesn't exist, 404.
+    """
+    reservation = db.get(Reservation, ip)
+    if reservation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No reservation found for IP {ip}",
+        )
+
+    db.delete(reservation)
+    db.commit()
+    # No return — 204 means an empty body.

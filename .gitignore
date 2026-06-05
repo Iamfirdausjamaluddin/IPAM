@@ -133,3 +133,7 @@ $RECYCLE.BIN/
 *.temp
 tmp/
 temp/
+# ----------------------------
+# Database backups - never commit these
+# ----------------------------
+*.sql

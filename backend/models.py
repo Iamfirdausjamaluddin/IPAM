@@ -6,7 +6,7 @@ generate migrations, and the application code uses them to query and
 modify rows as Python objects.
 """
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, func
+from sqlalchemy import String, Boolean, DateTime, Text, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
@@ -59,3 +59,32 @@ class IPAddress(Base):
 
     def __repr__(self) -> str:
         return f"<IPAddress(id={self.id}, ip={self.ip!r}, status={self.status!r})>"
+    
+class Reservation(Base):
+    """One row per reserved IP — the user's stated intent for that IP."""
+
+    __tablename__ = "reservations"
+
+    ip: Mapped[str] = mapped_column(
+        String(45),
+        ForeignKey("ip_addresses.ip", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    hostname: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    vm_id: Mapped[int | None] = mapped_column(nullable=True)
+    mac_address: Mapped[str | None] = mapped_column(String(17), nullable=True)
+    reserved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Reservation(ip={self.ip!r}, hostname={self.hostname!r})>"
