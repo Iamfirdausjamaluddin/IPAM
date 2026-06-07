@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from dependencies import get_db
+from config import settings
 from grid import compute_subnet_grid
 from models import IPAddress, Reservation
 from scanner import scan_all_ips
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 # How often the background scanner runs a full pass.
 # Per homelab-context.md section 12, full scans are spaced 5 minutes apart.
-SCAN_INTERVAL_SECONDS = 300
+SCAN_INTERVAL_SECONDS = settings.scan_interval_seconds
 
 # The /24 tabs the dashboard tracks: the third octet of 10.10.X.x.
 # Matches the tabs listed in homelab-context.md section 13 (11 through 15).
@@ -97,7 +98,7 @@ app = FastAPI(
 # When we deploy to K3s in Phase 8, the production frontend origin gets added here.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5174"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

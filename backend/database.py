@@ -1,37 +1,33 @@
 """
 Database connection setup for the IPAM backend.
 
-Builds the SQLAlchemy engine from DATABASE_URL in .env, exposes a
-SessionLocal factory for short-lived DB sessions, and a Base class
-that all ORM models will inherit from.
+Now reads configuration from the central Settings object (config.py) instead
+of calling os.getenv / load_dotenv directly. The connection details live in
+one place, validated and typed, so the same code runs unchanged on the laptop
+and inside a container.
 """
-import os
-from dotenv import load_dotenv
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-# Load variables from .env into os.environ.
-# Must run before we try to read DATABASE_URL.
-load_dotenv()
+from config import settings
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise RuntimeError(
-        "DATABASE_URL is not set. Did you create backend/.env?"
-    )
+# Kept as a module-level name for backward compatibility. Anything that did
+# `from database import DATABASE_URL` (most likely Alembic's env.py) keeps
+# working without edits. We'll confirm Alembic in Phase 5.2.
+DATABASE_URL = settings.database_url
 
-# The engine is a connection pool to Postgres — created once, reused
-# for the lifetime of the app. echo=True logs every SQL statement to
-# the terminal, which is enormously helpful while learning.
-# echo defaults to False; set SQL_ECHO=true in .env to see SQL traffic.
-SQL_ECHO = os.getenv("SQL_ECHO", "false").lower() == "true"
-engine = create_engine(DATABASE_URL, echo=SQL_ECHO)
+# The engine is a connection pool to Postgres — created once, reused for the
+# lifetime of the app. settings.sql_echo (set SQL_ECHO=true in .env) logs
+# every SQL statement to the terminal, which is helpful while learning.
+engine = create_engine(DATABASE_URL, echo=settings.sql_echo)
 
-# SessionLocal is a factory: calling SessionLocal() gives a fresh
-# Session, the object we use to run queries and save changes.
+# SessionLocal is a factory: calling SessionLocal() gives a fresh Session,
+# the object we use to run queries and save changes.
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-# Base is the parent class for every ORM model we will define.
-# SQLAlchemy uses it to collect table definitions in one registry.
+
+# Base is the parent class for every ORM model we define. SQLAlchemy uses it
+# to collect table definitions in one registry.
 class Base(DeclarativeBase):
     pass
