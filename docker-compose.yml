@@ -1,0 +1,64 @@
+# Phase 5.3 — bring the IPAM backend + its database up as one stack.
+# Run from the REPO ROOT (the folder containing this file and backend/):
+#     docker compose up --build
+#
+# Inside this stack the backend reaches the database at host "postgres" (the
+# service name below), NOT localhost. That is exactly why DATABASE_URL was
+# externalized in 5.1: your dev backend/.env still points at localhost and is
+# left untouched; this file injects the container value instead. Same code.
+
+services:
+  postgres:
+    image: postgres:16            # matches your existing data (written by 16.13)
+    container_name: ipam-postgres
+    environment:
+      POSTGRES_USER: ipam
+      POSTGRES_PASSWORD: ipam_dev_password
+      POSTGRES_DB: ipam
+    volumes:
+      # Reuse the EXISTING data volume so your reservations (.20/.70/.71)
+      # survive. Adopted as-is via the external declaration at the bottom.
+      - ipam-postgres-data:/var/lib/postgresql/data
+    ports:
+      # Publish 5432 so your local dev uvicorn (localhost:5432) still works too.
+      - "5432:5432"
+    healthcheck:
+      # pg_isready succeeds only once Postgres actually ACCEPTS connections,
+      # not merely once the process exists. The backend waits on this.
+      test: ["CMD-SHELL", "pg_isready -U ipam -d ipam"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build: ./backend             # builds backend/Dockerfile from 5.2
+    image: ipam-backend:dev
+    container_name: ipam-backend
+    environment:
+      # Host is "postgres" — the service name on the compose network. This is
+      # the ONE value that differs from your dev .env.
+      DATABASE_URL: postgresql+psycopg://ipam:ipam_dev_password@postgres:5432/ipam
+      CORS_ORIGINS: http://localhost:5174
+      # Quoted on purpose: docker compose rejects bare YAML booleans/numbers as
+      # env values, and pydantic-settings coerces the strings back to bool/int.
+      SQL_ECHO: "false"
+      SCAN_INTERVAL_SECONDS: "300"
+    ports:
+      - "8000:8000"
+    cap_add:
+      # Lets the scanner's icmplib privileged=True raw socket work — the
+      # container equivalent of running as Administrator on Windows.
+      - NET_RAW
+    depends_on:
+      postgres:
+        # Don't start the backend (and its alembic upgrade) until Postgres is
+        # healthy. Prevents the cold-start migration crash.
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  ipam-postgres-data:
+    # external: true => "this volume already exists; use it, do not create a
+    # new project-prefixed one." This is what preserves your existing data.
+    external: true
