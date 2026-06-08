@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 
 // The FastAPI backend. (Same value you confirmed working earlier.)
-const API_BASE = "http://localhost:8000";
+const API_BASE = "/api";
 
 // The /24 subnets we track, from the context doc (section 13): 11 through 15.
 const SUBNETS = [11, 12, 13, 14, 15];

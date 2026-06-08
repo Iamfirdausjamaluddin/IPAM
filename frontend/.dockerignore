@@ -1,0 +1,15 @@
+# Keep the Docker build context small and let the image build cleanly.
+
+# Installed dependencies — reinstalled fresh inside the image via `npm ci`.
+# (Huge, and may contain platform-specific binaries built on Windows.)
+node_modules/
+
+# Any local build output — the image builds its own dist/ in stage 1.
+dist/
+
+# Local env files, if any.
+.env
+.env.*
+
+# Editor / OS noise.
+.DS_Store
