@@ -7,11 +7,17 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 
-# Copy manifests first so this layer (the slow npm install) is cached and only
+# Copy manifests first so this layer (the slow install) is cached and only
 # re-runs when dependencies change, not on every source edit.
 COPY package*.json ./
-# npm ci installs EXACTLY what package-lock.json pins — reproducible builds.
-RUN npm ci
+# We use `npm install`, not `npm ci`, ON PURPOSE. The lockfile is generated on
+# Windows, which omits Linux-only optional native deps (e.g. @emnapi/*). `npm ci`
+# is strict and refuses when the lockfile is missing those Linux packages, so it
+# fails inside this Alpine image. `npm install` resolves against package.json and
+# pulls the platform-correct packages here. Trade-off: we give up npm ci's
+# byte-for-byte reproducibility — acceptable for a homelab project; a strict
+# pipeline would instead pin the offending dep or generate the lockfile on Linux.
+RUN npm install --no-audit --no-fund
 
 # Now the source, then build. `npm run build` (vite build) emits /app/dist:
 # plain static HTML/CSS/JS, with the /api relative paths from App.jsx baked in.
