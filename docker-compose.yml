@@ -57,6 +57,20 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  frontend:
+    build: ./frontend          # builds frontend/Dockerfile from 5.4
+    image: ipam-frontend:dev
+    container_name: ipam-frontend
+    ports:
+      # Browse the whole app at http://localhost:8080. nginx serves the static
+      # UI here AND reverse-proxies /api/* to the backend service.
+      - "8080:80"
+    depends_on:
+      # Wait for the backend so nginx can resolve the "backend" hostname at
+      # startup — otherwise nginx fails fast with "host not found in upstream".
+      - backend
+    restart: unless-stopped
+
 volumes:
   ipam-postgres-data:
     # external: true => "this volume already exists; use it, do not create a
