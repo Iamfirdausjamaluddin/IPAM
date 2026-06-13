@@ -1,0 +1,40 @@
+---
+# Joins the two agent nodes (10.10.14.101-102) to the K3s cluster.
+# Run AFTER install-k3s-server.yml — the server must exist to issue a token.
+
+# Play 1: read the join token off the server, store it in a variable.
+- name: Fetch K3s join token from the server
+  hosts: k3s_server
+  become: true # the token file is root-only readable
+  tasks:
+    - name: Read the node-token file
+      ansible.builtin.command:
+        cmd: cat /var/lib/rancher/k3s/server/node-token
+      register: k3s_token
+      changed_when: false # reading a file is not a change
+
+# Play 2: install K3s in agent mode on the workers, using that token.
+- name: Install K3s agents (workers)
+  hosts: k3s_agents
+  become: true
+  vars:
+    # Pull values from the server host's facts (cross-host reference).
+    server_url: "https://10.10.14.100:6443"
+    join_token: "{{ hostvars['k3s-server']['k3s_token'].stdout }}"
+
+  tasks:
+    - name: Download the official K3s install script
+      ansible.builtin.get_url:
+        url: https://get.k3s.io
+        dest: /usr/local/bin/k3s-install.sh
+        mode: "0755"
+
+    - name: Run the K3s install script (agent mode)
+      ansible.builtin.command:
+        cmd: /usr/local/bin/k3s-install.sh
+      environment:
+        K3S_URL: "{{ server_url }}"   # which server to join
+        K3S_TOKEN: "{{ join_token }}" # the shared secret
+      args:
+        # Agent installs create the k3s-agent service (not k3s.service).
+        creates: /etc/systemd/system/k3s-agent.service

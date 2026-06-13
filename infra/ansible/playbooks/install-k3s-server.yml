@@ -1,0 +1,33 @@
+---
+# Installs K3s control plane on the server node (10.10.14.100).
+# Run AFTER inventory connectivity is confirmed (ansible ... -m ping).
+
+- name: Install K3s server (control plane)
+  hosts: k3s_server
+  become: true # install system software as root via sudo
+
+  tasks:
+    - name: Download the official K3s install script
+      ansible.builtin.get_url:
+        url: https://get.k3s.io
+        dest: /usr/local/bin/k3s-install.sh
+        mode: "0755" # rwx for owner, r-x others — make it executable
+
+    - name: Run the K3s install script (server mode)
+      ansible.builtin.command:
+        cmd: /usr/local/bin/k3s-install.sh
+      environment:
+        # 644 kubeconfig so we can fetch it later (Phase 8) without root.
+        INSTALL_K3S_EXEC: "--write-kubeconfig-mode 644"
+      args:
+        # Skip re-running if K3s is already installed & active (idempotency).
+        creates: /etc/systemd/system/k3s.service
+
+    - name: Wait for the K3s node to report Ready
+      ansible.builtin.command:
+        cmd: k3s kubectl get nodes --no-headers
+      register: node_status
+      until: node_status.stdout is search("Ready")
+      retries: 20
+      delay: 10 # poll every 10s, up to ~3.5 min
+      changed_when: false # this is a check, not a change

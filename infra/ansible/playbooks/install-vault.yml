@@ -1,0 +1,44 @@
+---
+# Installs HashiCorp Vault on the vault VM (10.10.14.103).
+# Phase 7 scope: install + service present only.
+# Initializing and unsealing Vault is Phase 9 — a fresh Vault is
+# sealed/uninitialized by design, which is the correct state to leave it in.
+
+- name: Install HashiCorp Vault
+  hosts: vault
+  become: true
+
+  tasks:
+    - name: Install prerequisite packages
+      ansible.builtin.apt:
+        name:
+          - gnupg
+          - software-properties-common
+        state: present
+        update_cache: true
+
+    - name: Add HashiCorp GPG signing key
+      ansible.builtin.get_url:
+        url: https://apt.releases.hashicorp.com/gpg
+        dest: /usr/share/keyrings/hashicorp-archive-keyring.asc
+        mode: "0644"
+
+    - name: Add the HashiCorp apt repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.asc]
+          https://apt.releases.hashicorp.com jammy main
+        filename: hashicorp # creates /etc/apt/sources.list.d/hashicorp.list
+        state: present
+
+    - name: Install the vault package
+      ansible.builtin.apt:
+        name: vault
+        state: present
+        update_cache: true # refresh so the new repo is seen
+
+    - name: Confirm the vault systemd service exists
+      ansible.builtin.command:
+        cmd: systemctl list-unit-files vault.service
+      register: vault_unit
+      changed_when: false
