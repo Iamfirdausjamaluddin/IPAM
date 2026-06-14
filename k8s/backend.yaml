@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ipam-backend
+  namespace: ipam
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ipam-backend
+  template:
+    metadata:
+      labels:
+        app: ipam-backend
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: backend
+          image: ghcr.io/iamfirdausjamaluddin/ipam-backend:phase8
+          securityContext:
+            capabilities:
+              add: ["NET_RAW"]
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: ipam-backend-secrets
+          env:
+            - name: CORS_ORIGINS
+              value: "http://localhost:5174"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ipam-backend
+  namespace: ipam
+spec:
+  selector:
+    app: ipam-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP

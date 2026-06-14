@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ipam-seed
+  namespace: ipam
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: seed
+          image: ghcr.io/iamfirdausjamaluddin/ipam-backend:phase8
+          command: ["python", "seed.py"]
+          envFrom:
+            - secretRef:
+                name: ipam-backend-secrets

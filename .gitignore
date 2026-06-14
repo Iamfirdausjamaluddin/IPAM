@@ -82,6 +82,7 @@ override.tf.json
 *.retry
 inventory/host_vars/*_secrets.yml
 inventory/group_vars/*_secrets.yml
+infra/ansible/secrets.yml
 
 # ----------------------------
 # Docker

@@ -1,0 +1,26 @@
+---
+- name: Disable bundled Traefik so Nginx Ingress can own ports 80/443
+  hosts: k3s_server
+  become: true
+
+  tasks:
+    - name: Ensure the K3s config drop-in directory exists
+      ansible.builtin.file:
+        path: /etc/rancher/k3s/config.yaml.d
+        state: directory
+        mode: "0755"
+
+    - name: Add a drop-in that disables Traefik
+      ansible.builtin.copy:
+        dest: /etc/rancher/k3s/config.yaml.d/disable-traefik.yaml
+        content: |
+          disable:
+            - traefik
+        mode: "0644"
+      register: traefik_dropin
+
+    - name: Restart K3s to apply the disable (uninstalls Traefik)
+      ansible.builtin.service:
+        name: k3s
+        state: restarted
+      when: traefik_dropin.changed

@@ -36,6 +36,13 @@ variable "vms" {
       memory = 1024
       disk   = 20
     }
+    "ipam-db" = {
+      vm_id  = 704
+      ip     = "10.10.14.110/24"
+      cores  = 2
+      memory = 2048
+      disk   = 30
+    }
   }
 }
 

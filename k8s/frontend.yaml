@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ipam-frontend
+  namespace: ipam
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ipam-frontend
+  template:
+    metadata:
+      labels:
+        app: ipam-frontend
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: frontend
+          image: ghcr.io/iamfirdausjamaluddin/ipam-frontend:phase8
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ipam-frontend
+  namespace: ipam
+spec:
+  selector:
+    app: ipam-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP

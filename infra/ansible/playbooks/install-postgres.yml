@@ -1,0 +1,87 @@
+---
+- name: Install and configure PostgreSQL 16 on ipam-db
+  hosts: database
+  become: true
+  vars_files:
+    - ../secrets.yml
+  vars:
+    pg_version: 16
+    pg_conf_dir: "/etc/postgresql/16/main"
+
+  tasks:
+    # ---- Task group 1: Install PostgreSQL 16 from the official PGDG repo ----
+    - name: Install prerequisites for adding the PGDG repo
+      ansible.builtin.apt:
+        name:
+          - curl
+          - ca-certificates
+          - gnupg
+          - acl
+        state: present
+        update_cache: true
+
+    - name: Add the PostgreSQL GPG signing key
+      ansible.builtin.get_url:
+        url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+        dest: /usr/share/keyrings/postgresql.asc
+        mode: "0644"
+
+    - name: Add the PGDG apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+        filename: pgdg
+        state: present
+
+    - name: Install PostgreSQL 16 and the Python driver Ansible needs
+      ansible.builtin.apt:
+        name:
+          - "postgresql-{{ pg_version }}"
+          - python3-psycopg2
+        state: present
+        update_cache: true
+
+    # ---- Task group 2: Create the app database and least-privilege user ----
+    - name: Create the ipam database
+      become_user: postgres
+      community.postgresql.postgresql_db:
+        name: ipam
+        state: present
+
+    - name: Create the ipam application user
+      become_user: postgres
+      community.postgresql.postgresql_user:
+        name: ipam
+        password: "{{ postgres_ipam_password }}"
+        db: ipam
+        priv: ALL
+        state: present
+
+    - name: Grant the ipam user ownership of the public schema
+      become_user: postgres
+      community.postgresql.postgresql_schema:
+        db: ipam
+        name: public
+        owner: ipam
+        state: present
+
+    # ---- Task group 3: Network access (the hardening lesson) ----
+    - name: Bind PostgreSQL to its LAN interface (not just localhost)
+      ansible.builtin.lineinfile:
+        path: "{{ pg_conf_dir }}/postgresql.conf"
+        regexp: "^#?listen_addresses"
+        line: "listen_addresses = 'localhost,10.10.14.110'"
+        state: present
+      notify: Restart postgresql
+
+    - name: Allow the ipam user to connect only from the cluster subnet
+      ansible.builtin.lineinfile:
+        path: "{{ pg_conf_dir }}/pg_hba.conf"
+        line: "host    ipam    ipam    10.10.14.0/24    scram-sha-256"
+        state: present
+      notify: Restart postgresql
+
+  handlers:
+    - name: Restart postgresql
+      ansible.builtin.service:
+        name: postgresql
+        state: restarted
