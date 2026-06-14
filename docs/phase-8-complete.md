@@ -140,7 +140,11 @@ Operator should replace:
 - Never touch pfSense (firewall/DHCP/DNS/NAT/routing) — non-negotiable.
 
 ## Next: Phase 9 — Secrets with Vault
-Initialize/unseal the Phase 7 Vault (still sealed by design), wire the
+**Start by cutting a `phase-9-vault` branch** (`git checkout -b phase-9-vault`) —
+Phase 8 was committed straight to `main`, so this returns to the branch-per-phase
+rhythm.
+
+Then: initialize/unseal the Phase 7 Vault (still sealed by design), wire the
 **`disable_mlock = true`** requirement flagged in the Phase 7 doc (Vault 2.0.x
 removed `cap_ipc_lock`), and migrate the stopgap secrets above into Vault, synced
 into the cluster via External Secrets Operator. Reminder: never touch pfSense.
